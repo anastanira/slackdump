@@ -165,7 +165,7 @@ func (c *Client) startWorkers(ctx context.Context) {
 
 	seen := fltSeen(c.requests)
 	// create workers
-	for i := range c.workers {
+	for i := 0; i < c.workers; i++ {
 		c.wg.Add(1)
 		go func(workerNum int) {
 			c.worker(ctx, seen)
