@@ -5,9 +5,11 @@ This document outlines a realistic architecture for monitoring TCP connections a
 ## Goals
 
 - Detect inbound TCP connections to any local port.
-- Alert when a connection is accepted by any process.
+- Detect outbound TCP connections initiated by local processes.
+- Alert when a connection is accepted or initiated by any process.
 - Record traffic for later review.
 - Cover both macOS and iPhone devices.
+- Provide a dashboard with understandable summaries for non-technical users.
 
 ## Reality check: platform constraints
 
@@ -37,8 +39,8 @@ Key limitations:
 
 **Responsibilities**:
 
-- Monitor inbound TCP connections (all ports).
-- Map inbound connection to owning process.
+- Monitor inbound and outbound TCP connections (all ports).
+- Map connection to owning process.
 - Capture traffic payload when permitted.
 - Send alerts to a local UI or a backend.
 
@@ -64,13 +66,13 @@ Key limitations:
 **Responsibilities**:
 
 - Establish a packet tunnel and act as a user-space router.
-- Inspect packet headers for inbound connections to local ports.
+- Inspect packet headers for inbound and outbound connections to local ports.
 - Provide connection metadata to the UI and/or backend.
 
 **Implementation**:
 
 - `NEPacketTunnelProvider` reads packets from `packetFlow.readPackets`.
-- Decode IP/TCP headers to detect new inbound flows.
+- Decode IP/TCP headers to detect new inbound flows and outbound initiations.
 - Log metadata and optionally store a rolling buffer of packet payloads.
 
 **Constraints**:
@@ -78,13 +80,53 @@ Key limitations:
 - Packet capture is limited to what goes through the VPN tunnel.
 - Cannot access other app’s traffic unless routed through the VPN.
 
+## Dashboard and explanations
+
+A dashboard should summarize each flow with a non-technical explanation alongside raw metadata.
+
+**Suggested columns**:
+
+- Date
+- Time
+- Direction (Inbound/Outbound)
+- Process / App
+- Local port
+- Remote IP / host
+- Protocol
+- Packet summary (counts, bytes)
+- Plain-language explanation (e.g., "Safari requested encrypted web content from example.com")
+
+**Explanation pipeline**:
+
+- Map destination IPs to domains where possible.
+- Tag common protocols (HTTPS, DNS, MQTT, etc.).
+- Provide templated explanations based on protocol + app.
+
 ## Storage and recording strategy
 
 - Use **rolling buffers** to avoid unbounded storage growth.
 - Store:
-  - Flow metadata (timestamp, local port, remote IP, PID if available).
+  - Flow metadata (timestamp, direction, local port, remote IP, PID if available).
   - Sampled payload chunks (e.g., first N KB or specific intervals).
 - For sensitive data, ensure data is encrypted at rest.
+
+## Pattern analysis and AI assistance
+
+AI can help summarize traffic and highlight patterns, but it must respect privacy and platform limits.
+
+**Suggested AI features**:
+
+- Cluster similar flows by destination, app, and protocol to identify normal baselines.
+- Flag unusual destinations, uncommon ports, or sudden spikes in outbound volume.
+- Generate non-technical summaries for the dashboard explanation column.
+
+**Network-wide monitoring**:
+
+To record traffic from other devices on the same network, you need infrastructure that can observe that traffic (e.g., a router or gateway you control). The macOS/iOS app alone cannot see all LAN traffic by default. If you control the router:
+
+- Mirror traffic (SPAN) or use a gateway/VPN on the router.
+- Ingest flows into a central analyzer for cross-device pattern detection.
+- Present per-device summaries in the same dashboard.
 
 ## Security and privacy considerations
 
@@ -96,15 +138,15 @@ Key limitations:
 
 ### macOS
 
-1. Capture inbound TCP connection metadata.
-2. Alert on any new inbound connection.
+1. Capture inbound and outbound TCP connection metadata.
+2. Alert on any new connection.
 3. Record short payload segments.
-4. Show connection history in a UI.
+4. Show connection history in a dashboard with explanations.
 
 ### iOS
 
 1. VPN tunnel to capture packets.
-2. Alert on inbound connection metadata.
+2. Alert on inbound and outbound connection metadata.
 3. Store only metadata initially.
 
 ## Suggested next steps
